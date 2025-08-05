@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 AI Text Generator Pro - The Most Advanced Text Generation Tool for Linux
-Version: 5.0 (999x Enhanced)
+Version: 6.0 (Fixed & Enhanced)
 """
 
 import sys
@@ -12,49 +12,185 @@ import json
 import webbrowser
 from datetime import datetime
 from threading import Thread
+import subprocess
 
-import torch
-import numpy as np
-from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-    QTextEdit, QPushButton, QLabel, QProgressBar, QComboBox, 
-    QSlider, QGroupBox, QTabWidget, QFileDialog, QCheckBox,
-    QSplitter, QScrollArea, QFrame, QShortcut, QMenu
-)
-from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal, QTimer, QSettings
-from PyQt5.QtGui import (
-    QFont, QColor, QPalette, QIcon, QKeySequence, 
-    QTextCursor, QSyntaxHighlighter, QTextFormat
-)
-from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
-from transformers import (
-    AutoTokenizer, AutoModelForCausalLM, pipeline,
-    StoppingCriteria, StoppingCriteriaList
-)
-from tqdm import tqdm
-from colorama import init, Fore, Style
-from huggingface_hub import hf_hub_download
-from accelerate import init_empty_weights, load_checkpoint_and_dispatch
-from optimum.bettertransformer import BetterTransformer
-from qdarkstyle import load_stylesheet_pyqt5
+# First, check for critical system dependencies
+def check_system_dependencies():
+    """Check for required system libraries before importing PyQt5"""
+    try:
+        # Check for libGL
+        subprocess.run(["ldconfig", "-p", "|", "grep", "libGL.so.1"], 
+                      shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return True
+    except:
+        try:
+            # Try to install libGL if missing
+            print("🔧 Required system library libGL.so.1 not found. Attempting to install...")
+            subprocess.run(["sudo", "apt-get", "update"], check=True)
+            subprocess.run(["sudo", "apt-get", "install", "-y", "libgl1", "libglib2.0-0", "libxcb-xinerama0"], 
+                          check=True)
+            return True
+        except Exception as e:
+            print(f"❌ Failed to install system dependencies: {str(e)}")
+            print("\nPlease install required system libraries manually:")
+            print("sudo apt-get update")
+            print("sudo apt-get install -y libgl1 libglib2.0-0 libxcb-xinerama0")
+            return False
+
+# Check system dependencies before importing PyQt5
+if not check_system_dependencies():
+    print("❌ Cannot proceed without required system libraries. Please install them and try again.")
+    sys.exit(1)
+
+# Now it's safe to import PyQt5
+try:
+    from PyQt5.QtWidgets import (
+        QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+        QTextEdit, QPushButton, QLabel, QProgressBar, QComboBox, 
+        QSlider, QGroupBox, QTabWidget, QFileDialog, QCheckBox,
+        QSplitter, QScrollArea, QFrame, QShortcut, QMenu, QMessageBox
+    )
+    from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal, QTimer, QSettings
+    from PyQt5.QtGui import (
+        QFont, QColor, QPalette, QIcon, QKeySequence, 
+        QTextCursor, QSyntaxHighlighter, QTextFormat
+    )
+    from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
+except ImportError as e:
+    print(f"❌ Critical error: Failed to import PyQt5: {str(e)}")
+    print("\nPlease ensure system libraries are installed and try:")
+    print("pip install PyQt5 --no-cache-dir")
+    sys.exit(1)
+
+# Import other dependencies with error handling
+try:
+    import torch
+    import numpy as np
+    from transformers import (
+        AutoTokenizer, AutoModelForCausalLM, pipeline,
+        StoppingCriteria, StoppingCriteriaList
+    )
+    from tqdm import tqdm
+    from colorama import init, Fore, Style
+    from huggingface_hub import hf_hub_download
+    from accelerate import init_empty_weights, load_checkpoint_and_dispatch
+    from optimum.bettertransformer import BetterTransformer
+    from qdarkstyle import load_stylesheet_pyqt5
+except ImportError as e:
+    print(f"❌ Missing required package: {str(e)}")
+    print("\nPlease run: pip install -r requirements.txt")
+    sys.exit(1)
 
 # Initialize colorama
 init(autoreset=True)
 
 # Application settings
 APP_NAME = "AI Text Generator Pro"
-APP_VERSION = "5.0 (999x Enhanced)"
-APP_DESCRIPTION = "The most advanced AI text generation tool for Linux with 999x performance improvements"
+APP_VERSION = "6.0 (Fixed & Enhanced)"
+APP_DESCRIPTION = "The most advanced AI text generation tool for Linux with comprehensive error handling"
 APP_WEBSITE = "https://aitextgenpro.example.com"
 APP_ICON = "resources/icon.png"
 
 # Configure logging
+log_file = os.path.expanduser('~/.ai_text_generator_pro.log')
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    filename=os.path.expanduser('~/.ai_text_generator_pro.log')
+    filename=log_file
 )
 logger = logging.getLogger("AI_Text_Generator_Pro")
+
+class DependencyChecker:
+    """Checks and verifies all required dependencies"""
+    @staticmethod
+    def check_pyqt5():
+        """Verify PyQt5 is properly installed with all dependencies"""
+        try:
+            from PyQt5 import QtCore
+            return True
+        except ImportError as e:
+            logger.error(f"PyQt5 import failed: {str(e)}")
+            return False
+    
+    @staticmethod
+    def check_torch():
+        """Verify torch is properly installed"""
+        try:
+            import torch
+            return torch.__version__
+        except ImportError as e:
+            logger.error(f"Torch import failed: {str(e)}")
+            return None
+    
+    @staticmethod
+    def check_cuda():
+        """Check if CUDA is available"""
+        try:
+            import torch
+            return torch.cuda.is_available()
+        except:
+            return False
+
+class ErrorHandler:
+    """Handles errors with user-friendly messages and solutions"""
+    @staticmethod
+    def show_critical_error(parent, title, message, solution):
+        """Show a critical error dialog with solution"""
+        msg = QMessageBox(parent)
+        msg.setIcon(QMessageBox.Critical)
+        msg.setWindowTitle(title)
+        msg.setText(message)
+        msg.setInformativeText(f"Solution: {solution}")
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.exec_()
+        
+        logger.critical(f"Critical error: {title} - {message}\nSolution: {solution}")
+    
+    @staticmethod
+    def show_warning(parent, title, message, solution=None):
+        """Show a warning dialog"""
+        msg = QMessageBox(parent)
+        msg.setIcon(QMessageBox.Warning)
+        msg.setWindowTitle(title)
+        msg.setText(message)
+        if solution:
+            msg.setInformativeText(f"Solution: {solution}")
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.exec_()
+        
+        logger.warning(f"Warning: {title} - {message}\nSolution: {solution}")
+    
+    @staticmethod
+    def handle_dependency_error(parent, error_type, error_details):
+        """Handle dependency errors with specific solutions"""
+        if "PyQt5" in error_type or "libGL" in error_type:
+            ErrorHandler.show_critical_error(
+                parent,
+                "PyQt5 Dependency Error",
+                f"Failed to initialize GUI system: {error_details}",
+                "Please install required system libraries:\nsudo apt-get install -y libgl1 libglib2.0-0 libxcb-xinerama0"
+            )
+        elif "torch" in error_type.lower():
+            ErrorHandler.show_critical_error(
+                parent,
+                "PyTorch Error",
+                f"Failed to load PyTorch: {error_details}",
+                "Try reinstalling PyTorch:\npip uninstall -y torch && pip install torch"
+            )
+        elif "model" in error_type.lower():
+            ErrorHandler.show_warning(
+                parent,
+                "Model Loading Issue",
+                f"Failed to load AI model: {error_details}",
+                "Check your internet connection or try a different model"
+            )
+        else:
+            ErrorHandler.show_critical_error(
+                parent,
+                "Application Error",
+                f"An unexpected error occurred: {error_details}",
+                "Please check the log file for details:\n" + log_file
+            )
 
 class SyntaxHighlighter(QSyntaxHighlighter):
     """Advanced syntax highlighting for generated text"""
@@ -109,20 +245,31 @@ class ModelLoaderThread(QThread):
 
     def run(self):
         try:
-            self.progress.emit(10, "Initializing system resources...")
+            self.progress.emit(10, "Checking system resources...")
             
-            # Check system resources
-            has_gpu = torch.cuda.is_available()
-            gpu_count = torch.cuda.device_count() if has_gpu else 0
-            
-            with open('/proc/meminfo', 'r') as f:
-                mem_total = int(f.readline().split()[1]) / 1024  # MB
+            # Check system resources with proper error handling
+            try:
+                has_gpu = torch.cuda.is_available()
+                gpu_count = torch.cuda.device_count() if has_gpu else 0
+                
+                with open('/proc/meminfo', 'r') as f:
+                    mem_total = int(f.readline().split()[1]) / 1024  # MB
+            except Exception as e:
+                logger.warning(f"Failed to check system resources: {str(e)}")
+                has_gpu = False
+                gpu_count = 0
+                mem_total = 4096  # Assume 4GB if detection fails
             
             self.progress.emit(20, f"Detected {gpu_count} GPU(s) and {mem_total:.1f} MB RAM")
             
             # Create cache directory
-            os.makedirs(self.cache_dir, exist_ok=True)
-            self.progress.emit(30, f"Using cache directory: {self.cache_dir}")
+            try:
+                os.makedirs(self.cache_dir, exist_ok=True)
+                self.progress.emit(30, f"Using cache directory: {self.cache_dir}")
+            except Exception as e:
+                logger.error(f"Failed to create cache directory: {str(e)}")
+                self.error.emit(f"Failed to create cache directory: {str(e)}")
+                return
             
             # Download model files with progress
             files = [
@@ -149,68 +296,129 @@ class ModelLoaderThread(QThread):
                         repo_id=self.model_name,
                         filename=file,
                         local_dir=self.cache_dir,
-                        local_dir_use_symlinks=False
+                        local_dir_use_symlinks=False,
+                        timeout=120  # Add timeout to prevent hanging
                     )
                     downloaded += 1
                 except Exception as e:
                     logger.warning(f"Failed to download {file}: {str(e)}")
+                    # Continue with other files instead of failing completely
             
             self.progress.emit(80, "Loading tokenizer...")
-            tokenizer = AutoTokenizer.from_pretrained(
-                self.cache_dir,
-                use_fast=True,
-                trust_remote_code=True
-            )
-            tokenizer.pad_token = tokenizer.eos_token
+            try:
+                tokenizer = AutoTokenizer.from_pretrained(
+                    self.cache_dir,
+                    use_fast=True,
+                    trust_remote_code=True,
+                    local_files_only=True  # Use local files only after download
+                )
+                tokenizer.pad_token = tokenizer.eos_token
+            except Exception as e:
+                logger.error(f"Tokenizer loading failed: {str(e)}")
+                self.error.emit(f"Tokenizer loading failed: {str(e)}")
+                return
             
             self.progress.emit(85, "Loading model with optimizations...")
             
             # Load model with appropriate quantization
-            if self.quantization == "4-bit" and has_gpu:
-                from transformers import BitsAndBytesConfig
-                nf4_config = BitsAndBytesConfig(
-                    load_in_4bit=True,
-                    bnb_4bit_quant_type="nf4",
-                    bnb_4bit_use_double_quant=True,
-                    bnb_4bit_compute_dtype=torch.bfloat16
-                )
+            try:
+                if self.quantization == "4-bit" and has_gpu:
+                    from transformers import BitsAndBytesConfig
+                    nf4_config = BitsAndBytesConfig(
+                        load_in_4bit=True,
+                        bnb_4bit_quant_type="nf4",
+                        bnb_4bit_use_double_quant=True,
+                        bnb_4bit_compute_dtype=torch.bfloat16
+                    )
+                    
+                    model = AutoModelForCausalLM.from_pretrained(
+                        self.cache_dir,
+                        quantization_config=nf4_config,
+                        device_map="auto",
+                        trust_remote_code=True,
+                        local_files_only=True
+                    )
+                elif self.quantization == "8-bit" and has_gpu:
+                    model = AutoModelForCausalLM.from_pretrained(
+                        self.cache_dir,
+                        load_in_8bit=True,
+                        device_map="auto",
+                        trust_remote_code=True,
+                        local_files_only=True
+                    )
+                else:
+                    model = AutoModelForCausalLM.from_pretrained(
+                        self.cache_dir,
+                        device_map="auto",
+                        trust_remote_code=True,
+                        local_files_only=True
+                    )
+                    
+                    # Apply BetterTransformer for CPU optimization
+                    try:
+                        model = BetterTransformer.transform(model, keep_original_model=False)
+                    except Exception as e:
+                        logger.info(f"BetterTransformer not applicable: {str(e)}")
                 
-                model = AutoModelForCausalLM.from_pretrained(
-                    self.cache_dir,
-                    quantization_config=nf4_config,
-                    device_map="auto",
-                    trust_remote_code=True
-                )
-            elif self.quantization == "8-bit" and has_gpu:
-                model = AutoModelForCausalLM.from_pretrained(
-                    self.cache_dir,
-                    load_in_8bit=True,
-                    device_map="auto",
-                    trust_remote_code=True
-                )
-            else:
-                model = AutoModelForCausalLM.from_pretrained(
-                    self.cache_dir,
-                    device_map="auto",
-                    trust_remote_code=True
-                )
+                self.progress.emit(95, "Finalizing model setup...")
+                model.eval()
                 
-                # Apply BetterTransformer for CPU optimization
+                if has_gpu:
+                    torch.backends.cudnn.benchmark = True
+                
+                self.progress.emit(100, "Model loaded successfully!")
+                time.sleep(0.5)  # Give UI time to update
+                
+                self.finished.emit(model, tokenizer)
+                
+            except Exception as e:
+                logger.error(f"Model loading failed with local files: {str(e)}", exc_info=True)
+                
+                # Try without local_files_only as fallback
                 try:
-                    model = BetterTransformer.transform(model, keep_original_model=False)
-                except:
-                    pass
-            
-            self.progress.emit(95, "Finalizing model setup...")
-            model.eval()
-            
-            if has_gpu:
-                torch.backends.cudnn.benchmark = True
-            
-            self.progress.emit(100, "Model loaded successfully!")
-            time.sleep(0.5)  # Give UI time to update
-            
-            self.finished.emit(model, tokenizer)
+                    self.progress.emit(85, "Trying fallback model loading...")
+                    
+                    if self.quantization == "4-bit" and has_gpu:
+                        from transformers import BitsAndBytesConfig
+                        nf4_config = BitsAndBytesConfig(
+                            load_in_4bit=True,
+                            bnb_4bit_quant_type="nf4",
+                            bnb_4bit_use_double_quant=True,
+                            bnb_4bit_compute_dtype=torch.bfloat16
+                        )
+                        
+                        model = AutoModelForCausalLM.from_pretrained(
+                            self.model_name,
+                            quantization_config=nf4_config,
+                            device_map="auto",
+                            trust_remote_code=True
+                        )
+                    elif self.quantization == "8-bit" and has_gpu:
+                        model = AutoModelForCausalLM.from_pretrained(
+                            self.model_name,
+                            load_in_8bit=True,
+                            device_map="auto",
+                            trust_remote_code=True
+                        )
+                    else:
+                        model = AutoModelForCausalLM.from_pretrained(
+                            self.model_name,
+                            device_map="auto",
+                            trust_remote_code=True
+                        )
+                        
+                        try:
+                            model = BetterTransformer.transform(model, keep_original_model=False)
+                        except:
+                            pass
+                    
+                    model.eval()
+                    self.progress.emit(100, "Model loaded successfully (fallback)!")
+                    
+                    self.finished.emit(model, tokenizer)
+                except Exception as e2:
+                    logger.error(f"Fallback model loading also failed: {str(e2)}", exc_info=True)
+                    self.error.emit(f"Model loading failed: {str(e)}\nFallback also failed: {str(e2)}")
             
         except Exception as e:
             logger.error(f"Model loading failed: {str(e)}", exc_info=True)
@@ -237,44 +445,65 @@ class TextGenerationThread(QThread):
         try:
             start_time = time.time()
             
-            # Tokenize input
-            inputs = self.tokenizer(
-                self.prompt,
-                return_tensors="pt",
-                truncation=True,
-                max_length=1024,
-                padding=True
-            ).to(self.model.device)
+            # Tokenize input with error handling
+            try:
+                inputs = self.tokenizer(
+                    self.prompt,
+                    return_tensors="pt",
+                    truncation=True,
+                    max_length=1024,
+                    padding=True
+                )
+                
+                # Move to proper device
+                if hasattr(self.model, 'device'):
+                    inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+                else:
+                    inputs = {k: v.to(next(self.model.parameters()).device) for k, v in inputs.items()}
+            except Exception as e:
+                logger.error(f"Input tokenization failed: {str(e)}")
+                self.error.emit(f"Input processing failed: {str(e)}")
+                return
             
             self.progress.emit(20)
             
             # Generate text
-            with torch.no_grad():
-                outputs = self.model.generate(
-                    **inputs,
-                    max_new_tokens=self.params['max_new_tokens'],
-                    temperature=self.params['temperature'],
-                    top_p=self.params['top_p'],
-                    top_k=self.params['top_k'],
-                    repetition_penalty=self.params['repetition_penalty'],
-                    do_sample=True,
-                    pad_token_id=self.tokenizer.eos_token_id,
-                    eos_token_id=self.tokenizer.eos_token_id,
-                    use_cache=True
-                )
+            try:
+                with torch.no_grad():
+                    outputs = self.model.generate(
+                        **inputs,
+                        max_new_tokens=self.params['max_new_tokens'],
+                        temperature=self.params['temperature'],
+                        top_p=self.params['top_p'],
+                        top_k=self.params['top_k'],
+                        repetition_penalty=self.params['repetition_penalty'],
+                        do_sample=True,
+                        pad_token_id=self.tokenizer.eos_token_id,
+                        eos_token_id=self.tokenizer.eos_token_id,
+                        use_cache=True
+                    )
+            except Exception as e:
+                logger.error(f"Text generation failed: {str(e)}")
+                self.error.emit(f"Text generation failed: {str(e)}")
+                return
             
             self.progress.emit(80)
             
             # Decode output
-            generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-            
-            # Remove prompt from generated text if it's included
-            if self.prompt in generated_text:
-                generated_text = generated_text.replace(self.prompt, "", 1).strip()
+            try:
+                generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+                
+                # Remove prompt from generated text if it's included
+                if self.prompt in generated_text:
+                    generated_text = generated_text.replace(self.prompt, "", 1).strip()
+            except Exception as e:
+                logger.error(f"Text decoding failed: {str(e)}")
+                self.error.emit(f"Text decoding failed: {str(e)}")
+                return
             
             # Calculate performance metrics
             generation_time = time.time() - start_time
-            tokens_generated = outputs.shape[1]
+            tokens_generated = outputs.shape[1] if len(outputs.shape) > 1 else 0
             
             self.progress.emit(100)
             
@@ -286,10 +515,51 @@ class TextGenerationThread(QThread):
             self.error.emit(f"Text generation failed: {str(e)}")
 
 class SettingsManager:
-    """Manages application settings"""
+    """Manages application settings with validation"""
     def __init__(self):
         self.settings = QSettings("AI_Text_Generator_Pro", "Settings")
+        self.validate_and_fix_settings()
+    
+    def validate_and_fix_settings(self):
+        """Validate settings and fix any invalid values"""
+        # Validate model settings
+        model_name = self.settings.value('model/name', 'aubmindlab/ara-gpt2-base')
+        if not model_name:
+            self.settings.setValue('model/name', 'aubmindlab/ara-gpt2-base')
         
+        cache_dir = self.settings.value('model/cache_dir', '')
+        if not cache_dir or not os.path.isabs(cache_dir):
+            self.settings.setValue('model/cache_dir', os.path.expanduser('~/.cache/ai_text_generator_pro/models'))
+        
+        device = self.settings.value('model/device', 'auto')
+        if device not in ['auto', 'cpu', 'cuda']:
+            self.settings.setValue('model/device', 'auto')
+        
+        quantization = self.settings.value('model/quantization', 'auto')
+        if quantization not in ['auto', 'none', '4-bit', '8-bit']:
+            self.settings.setValue('model/quantization', 'auto')
+        
+        # Validate generation settings
+        max_tokens = self.settings.value('generation/max_tokens', 250, type=int)
+        if max_tokens < 50 or max_tokens > 1000:
+            self.settings.setValue('generation/max_tokens', 250)
+        
+        temperature = self.settings.value('generation/temperature', 0.6, type=float)
+        if temperature < 0.1 or temperature > 1.5:
+            self.settings.setValue('generation/temperature', 0.6)
+        
+        top_p = self.settings.value('generation/top_p', 0.85, type=float)
+        if top_p < 0.1 or top_p > 1.0:
+            self.settings.setValue('generation/top_p', 0.85)
+        
+        top_k = self.settings.value('generation/top_k', 40, type=int)
+        if top_k < 5 or top_k > 200:
+            self.settings.setValue('generation/top_k', 40)
+        
+        rep_penalty = self.settings.value('generation/rep_penalty', 1.2, type=float)
+        if rep_penalty < 1.0 or rep_penalty > 2.0:
+            self.settings.setValue('generation/rep_penalty', 1.2)
+    
     def get(self, key, default=None):
         return self.settings.value(key, default)
     
@@ -327,7 +597,7 @@ class SettingsManager:
         self.set('generation/rep_penalty', settings['repetition_penalty'])
 
 class MainWindow(QMainWindow):
-    """Main application window"""
+    """Main application window with comprehensive error handling"""
     def __init__(self):
         super().__init__()
         
@@ -338,6 +608,7 @@ class MainWindow(QMainWindow):
         self.model_loader = None
         self.text_generator = None
         self.is_model_loaded = False
+        self.is_initializing = True
         
         # Setup UI
         self.setWindowTitle(f"{APP_NAME} - {APP_VERSION}")
@@ -359,7 +630,7 @@ class MainWindow(QMainWindow):
         
         # Create status bar
         self.status_bar = self.statusBar()
-        self.status_bar.showMessage("Ready")
+        self.status_bar.showMessage("Initializing application...")
         
         # Load settings and initialize
         self.load_settings()
@@ -371,8 +642,11 @@ class MainWindow(QMainWindow):
         # Show window
         self.show()
         
+        # Final initialization step
+        self.is_initializing = False
+    
     def create_menu_bar(self):
-        """Create application menu bar"""
+        """Create application menu bar with error handling"""
         menu_bar = self.menuBar()
         
         # File menu
@@ -465,21 +739,21 @@ class MainWindow(QMainWindow):
         
         # Control buttons
         self.start_button = QPushButton("Start Generation")
-        self.start_button.setIcon(QIcon("resources/generate.png"))
+        self.start_button.setIcon(self.style().standardIcon(getattr(QStyle, 'SP_MediaPlay')))
         self.start_button.setFixedSize(150, 40)
         self.start_button.clicked.connect(self.start_generation)
         self.start_button.setEnabled(False)
         top_row.addWidget(self.start_button)
         
         self.stop_button = QPushButton("Stop")
-        self.stop_button.setIcon(QIcon("resources/stop.png"))
+        self.stop_button.setIcon(self.style().standardIcon(getattr(QStyle, 'SP_MediaStop')))
         self.stop_button.setFixedSize(100, 40)
         self.stop_button.clicked.connect(self.stop_generation)
         self.stop_button.setEnabled(False)
         top_row.addWidget(self.stop_button)
         
         self.exit_button = QPushButton("Exit")
-        self.exit_button.setIcon(QIcon("resources/exit.png"))
+        self.exit_button.setIcon(self.style().standardIcon(getattr(QStyle, 'SP_DialogCloseButton')))
         self.exit_button.setFixedSize(100, 40)
         self.exit_button.clicked.connect(self.close)
         top_row.addWidget(self.exit_button)
@@ -493,7 +767,7 @@ class MainWindow(QMainWindow):
         tokens_layout = QVBoxLayout()
         tokens_label = QLabel("Max Tokens:")
         self.tokens_slider = QSlider(Qt.Horizontal)
-        self.tokens_slider.setRange(50, 500)
+        self.tokens_slider.setRange(50, 1000)
         self.tokens_slider.setValue(250)
         self.tokens_slider.valueChanged.connect(self.update_tokens_label)
         self.tokens_value = QLabel("250")
@@ -506,7 +780,7 @@ class MainWindow(QMainWindow):
         temp_layout = QVBoxLayout()
         temp_label = QLabel("Temperature:")
         self.temp_slider = QSlider(Qt.Horizontal)
-        self.temp_slider.setRange(1, 10)
+        self.temp_slider.setRange(1, 15)
         self.temp_slider.setValue(6)
         self.temp_slider.valueChanged.connect(self.update_temp_label)
         self.temp_value = QLabel("0.6")
@@ -519,7 +793,7 @@ class MainWindow(QMainWindow):
         top_p_layout = QVBoxLayout()
         top_p_label = QLabel("Top P:")
         self.top_p_slider = QSlider(Qt.Horizontal)
-        self.top_p_slider.setRange(50, 100)
+        self.top_p_slider.setRange(10, 100)
         self.top_p_slider.setValue(85)
         self.top_p_slider.valueChanged.connect(self.update_top_p_label)
         self.top_p_value = QLabel("0.85")
@@ -532,7 +806,7 @@ class MainWindow(QMainWindow):
         top_k_layout = QVBoxLayout()
         top_k_label = QLabel("Top K:")
         self.top_k_slider = QSlider(Qt.Horizontal)
-        self.top_k_slider.setRange(10, 100)
+        self.top_k_slider.setRange(5, 200)
         self.top_k_slider.setValue(40)
         self.top_k_slider.valueChanged.connect(self.update_top_k_label)
         self.top_k_value = QLabel("40")
@@ -580,6 +854,7 @@ class MainWindow(QMainWindow):
         self.prompt_input = QTextEdit()
         self.prompt_input.setPlaceholderText("Type your prompt here...")
         self.prompt_input.setFont(QFont("Arial", 12))
+        self.prompt_input.setLineWrapMode(QTextEdit.WidgetWidth)
         input_layout.addWidget(self.prompt_input, 1)
         
         # Create output tab
@@ -614,59 +889,120 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.tab_widget, 1)
     
     def load_settings(self):
-        """Load application settings"""
-        # Load model settings
-        model_settings = self.settings_manager.get_model_settings()
-        
-        # Load generation settings
-        gen_settings = self.settings_manager.get_generation_settings()
-        self.tokens_slider.setValue(gen_settings['max_new_tokens'])
-        self.temp_slider.setValue(int(gen_settings['temperature'] * 10))
-        self.top_p_slider.setValue(int(gen_settings['top_p'] * 100))
-        self.top_k_slider.setValue(gen_settings['top_k'])
-        self.rep_slider.setValue(int(gen_settings['repetition_penalty'] * 10))
-        
-        # Update labels
-        self.update_tokens_label()
-        self.update_temp_label()
-        self.update_top_p_label()
-        self.update_top_k_label()
-        self.update_rep_label()
+        """Load application settings with validation"""
+        try:
+            # Load model settings
+            model_settings = self.settings_manager.get_model_settings()
+            
+            # Load generation settings
+            gen_settings = self.settings_manager.get_generation_settings()
+            self.tokens_slider.setValue(gen_settings['max_new_tokens'])
+            self.temp_slider.setValue(int(gen_settings['temperature'] * 10))
+            self.top_p_slider.setValue(int(gen_settings['top_p'] * 100))
+            self.top_k_slider.setValue(gen_settings['top_k'])
+            self.rep_slider.setValue(int(gen_settings['repetition_penalty'] * 10))
+            
+            # Update labels
+            self.update_tokens_label()
+            self.update_temp_label()
+            self.update_top_p_label()
+            self.update_top_k_label()
+            self.update_rep_label()
+        except Exception as e:
+            logger.error(f"Failed to load settings: {str(e)}")
+            # Use default values if settings loading fails
+            self.tokens_slider.setValue(250)
+            self.temp_slider.setValue(6)
+            self.top_p_slider.setValue(85)
+            self.top_k_slider.setValue(40)
+            self.rep_slider.setValue(12)
+            
+            self.update_tokens_label()
+            self.update_temp_label()
+            self.update_top_p_label()
+            self.update_top_k_label()
+            self.update_rep_label()
     
     def save_settings(self):
-        """Save application settings"""
-        # Save model settings
-        model_settings = {
-            'model_name': "aubmindlab/ara-gpt2-base",  # We're using a fixed model for this version
-            'cache_dir': os.path.expanduser('~/.cache/ai_text_generator_pro/models'),
-            'device': 'auto',
-            'quantization': 'auto'
-        }
-        self.settings_manager.save_model_settings(model_settings)
-        
-        # Save generation settings
-        gen_settings = {
-            'max_new_tokens': self.tokens_slider.value(),
-            'temperature': self.temp_slider.value() / 10.0,
-            'top_p': self.top_p_slider.value() / 100.0,
-            'top_k': self.top_k_slider.value(),
-            'repetition_penalty': self.rep_slider.value() / 10.0
-        }
-        self.settings_manager.save_generation_settings(gen_settings)
+        """Save application settings with validation"""
+        try:
+            # Save model settings
+            model_settings = {
+                'model_name': "aubmindlab/ara-gpt2-base",
+                'cache_dir': os.path.expanduser('~/.cache/ai_text_generator_pro/models'),
+                'device': 'auto',
+                'quantization': 'auto'
+            }
+            self.settings_manager.save_model_settings(model_settings)
+            
+            # Save generation settings
+            gen_settings = {
+                'max_new_tokens': self.tokens_slider.value(),
+                'temperature': self.temp_slider.value() / 10.0,
+                'top_p': self.top_p_slider.value() / 100.0,
+                'top_k': self.top_k_slider.value(),
+                'repetition_penalty': self.rep_slider.value() / 10.0
+            }
+            self.settings_manager.save_generation_settings(gen_settings)
+        except Exception as e:
+            logger.error(f"Failed to save settings: {str(e)}")
     
     def initialize_application(self):
-        """Initialize the application"""
-        self.status_bar.showMessage("Initializing application...")
-        
-        # Create cache directory
-        cache_dir = os.path.expanduser('~/.cache/ai_text_generator_pro/models')
-        os.makedirs(cache_dir, exist_ok=True)
-        
-        # Start loading model in background
-        self.load_model()
+        """Initialize the application with comprehensive error handling"""
+        try:
+            self.status_bar.showMessage("Initializing application...")
+            
+            # Create cache directory
+            cache_dir = os.path.expanduser('~/.cache/ai_text_generator_pro/models')
+            try:
+                os.makedirs(cache_dir, exist_ok=True)
+                logger.info(f"Cache directory created at {cache_dir}")
+            except Exception as e:
+                logger.error(f"Failed to create cache directory: {str(e)}")
+                ErrorHandler.show_warning(
+                    self,
+                    "Cache Directory Error",
+                    "Failed to create cache directory",
+                    f"Please check permissions for {cache_dir}"
+                )
+            
+            # Check for critical dependencies
+            if not DependencyChecker.check_pyqt5():
+                ErrorHandler.show_critical_error(
+                    self,
+                    "PyQt5 Error",
+                    "PyQt5 is not properly installed",
+                    "Please run: pip install --upgrade PyQt5"
+                )
+                return
+            
+            torch_version = DependencyChecker.check_torch()
+            if not torch_version:
+                ErrorHandler.show_critical_error(
+                    self,
+                    "PyTorch Error",
+                    "PyTorch is not installed or corrupted",
+                    "Please run: pip install --upgrade torch"
+                )
+                return
+            
+            # Start loading model in background
+            QTimer.singleShot(100, self.load_model)
+            
+        except Exception as e:
+            logger.error(f"Application initialization failed: {str(e)}", exc_info=True)
+            ErrorHandler.show_critical_error(
+                self,
+                "Initialization Error",
+                f"Failed to initialize application: {str(e)}",
+                "Please check the log file for details:\n" + log_file
+            )
     
     def load_model(self):
-        """Load the AI model in a background thread"""
+        """Load the AI model in a background thread with fallbacks"""
+        if self.is_initializing:
+            return
+            
         self.model_status.setText("Model Status: Loading...")
         self.model_status.setStyleSheet("font-weight: bold; color: #50C878;")
         self.start_button.setEnabled(False)
@@ -704,14 +1040,20 @@ class MainWindow(QMainWindow):
         self.stop_button.setEnabled(False)
         self.progress_bar.setValue(100)
         
-        self.status_bar.showMessage("Model loaded successfully!")
+        # Show GPU info if available
+        gpu_info = ""
+        if DependencyChecker.check_cuda():
+            gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "N/A"
+            gpu_info = f" (GPU: {gpu_name})"
+        
+        self.status_bar.showMessage(f"Model loaded successfully!{gpu_info}")
         logger.info("AI model loaded successfully")
         
         # Save settings
         self.save_settings()
     
     def model_load_error(self, error_message):
-        """Handle model loading error"""
+        """Handle model loading error with user-friendly message"""
         self.model_status.setText("Model Status: Error")
         self.model_status.setStyleSheet("font-weight: bold; color: #FF5555;")
         self.start_button.setEnabled(False)
@@ -720,25 +1062,56 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage(f"Error: {error_message}")
         logger.error(f"Model loading error: {error_message}")
         
-        # Show error dialog
-        from PyQt5.QtWidgets import QMessageBox
-        QMessageBox.critical(
-            self, 
-            "Model Loading Error", 
-            f"Failed to load AI model:\n{error_message}\n\n"
-            "Please check the log file for details:\n"
-            "~/.ai_text_generator_pro.log"
+        # Show error dialog with solutions
+        ErrorHandler.show_warning(
+            self,
+            "Model Loading Error",
+            "Failed to load AI model",
+            error_message
         )
+        
+        # Offer solutions based on error type
+        if "CUDA" in error_message or "GPU" in error_message:
+            solution = ("Try running with CPU only:\n"
+                       "1. Go to Model > Model Settings\n"
+                       "2. Set Quantization to 'none'\n"
+                       "3. Click OK and try reloading the model")
+            ErrorHandler.show_warning(self, "GPU Issue", 
+                                     "CUDA/GPU error detected", solution)
+        elif "disk space" in error_message.lower() or "space" in error_message.lower():
+            solution = ("Not enough disk space for model.\n"
+                       "Please free up space or change cache directory in Model Settings.")
+            ErrorHandler.show_warning(self, "Disk Space", 
+                                     "Not enough disk space", solution)
+        elif "permission" in error_message.lower():
+            solution = ("Permission denied for cache directory.\n"
+                       "Please check permissions for:\n" + 
+                       self.settings_manager.get('model/cache_dir', ''))
+            ErrorHandler.show_warning(self, "Permission Error", 
+                                     "Access denied", solution)
     
     def start_generation(self):
-        """Start text generation"""
+        """Start text generation with input validation"""
+        if self.is_initializing:
+            return
+            
         if not self.is_model_loaded:
-            self.status_bar.showMessage("Error: Model not loaded")
+            ErrorHandler.show_warning(
+                self,
+                "Model Not Loaded",
+                "Cannot generate text",
+                "The AI model is not loaded. Please wait for it to load or try reloading it."
+            )
             return
         
         prompt = self.prompt_input.toPlainText().strip()
         if not prompt:
-            self.status_bar.showMessage("Error: Please enter a prompt")
+            ErrorHandler.show_warning(
+                self,
+                "Empty Prompt",
+                "Please enter a prompt",
+                "Type something in the input field before generating text."
+            )
             return
         
         # Get generation parameters
@@ -780,20 +1153,28 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(100)
         
         # Display results
-        self.result_output.setPlainText(generated_text)
-        self.tab_widget.setCurrentIndex(1)  # Switch to output tab
-        
-        # Update performance stats
-        tokens_per_second = tokens_generated / generation_time if generation_time > 0 else 0
-        self.time_label.setText(f"Time: {generation_time:.2f}s")
-        self.tokens_label.setText(f"Tokens: {tokens_generated}")
-        self.speed_label.setText(f"Speed: {tokens_per_second:.1f} tokens/s")
-        
-        self.status_bar.showMessage(f"Text generated successfully! ({generation_time:.2f}s)")
-        logger.info(f"Text generated successfully in {generation_time:.2f}s")
+        if generated_text.strip():
+            self.result_output.setPlainText(generated_text)
+            self.tab_widget.setCurrentIndex(1)  # Switch to output tab
+            
+            # Update performance stats
+            tokens_per_second = tokens_generated / generation_time if generation_time > 0 else 0
+            self.time_label.setText(f"Time: {generation_time:.2f}s")
+            self.tokens_label.setText(f"Tokens: {tokens_generated}")
+            self.speed_label.setText(f"Speed: {tokens_per_second:.1f} tokens/s")
+            
+            self.status_bar.showMessage(f"Text generated successfully! ({generation_time:.2f}s)")
+            logger.info(f"Text generated successfully in {generation_time:.2f}s")
+        else:
+            ErrorHandler.show_warning(
+                self,
+                "Empty Result",
+                "Generated text is empty",
+                "The model didn't produce any text. Try adjusting the parameters."
+            )
     
     def generation_error(self, error_message):
-        """Handle text generation error"""
+        """Handle text generation error with specific solutions"""
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.progress_bar.setValue(0)
@@ -801,16 +1182,34 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage(f"Generation error: {error_message}")
         logger.error(f"Text generation error: {error_message}")
         
-        # Show error dialog
-        from PyQt5.QtWidgets import QMessageBox
-        QMessageBox.critical(
+        # Show specific error with solutions
+        ErrorHandler.show_warning(
             self, 
             "Generation Error", 
-            f"Failed to generate text:\n{error_message}"
+            "Failed to generate text",
+            error_message
         )
+        
+        # Offer specific solutions based on error type
+        if "CUDA" in error_message or "GPU" in error_message:
+            solution = ("Try reducing the max tokens or switching to CPU mode:\n"
+                       "1. Lower the Max Tokens slider\n"
+                       "2. Go to Model > Model Settings\n"
+                       "3. Set Quantization to 'none'\n"
+                       "4. Click OK and reload the model")
+            ErrorHandler.show_warning(self, "GPU Memory Error", 
+                                     "CUDA out of memory", solution)
+        elif "repetition" in error_message.lower():
+            solution = ("Try lowering the Repetition Penalty value\n"
+                       "or increasing the Temperature for more diversity.")
+            ErrorHandler.show_warning(self, "Repetition Error", 
+                                     "Repetition penalty issue", solution)
     
     def stop_generation(self):
-        """Stop text generation"""
+        """Stop text generation safely"""
+        if self.is_initializing:
+            return
+            
         if self.text_generator and self.text_generator.isRunning():
             self.text_generator.stop()
             self.text_generator.wait()
@@ -820,9 +1219,13 @@ class MainWindow(QMainWindow):
             self.stop_button.setEnabled(False)
             self.progress_bar.setValue(0)
             self.status_bar.showMessage("Generation stopped by user")
+            logger.info("Text generation stopped by user")
     
     def reload_model(self):
-        """Reload the AI model"""
+        """Reload the AI model with safety checks"""
+        if self.is_initializing:
+            return
+            
         if self.model_loader and self.model_loader.isRunning():
             self.model_loader.stop()
             self.model_loader.wait()
@@ -831,7 +1234,14 @@ class MainWindow(QMainWindow):
         self.model = None
         self.tokenizer = None
         
-        self.load_model()
+        # Reset UI state
+        self.model_status.setText("Model Status: Reloading...")
+        self.model_status.setStyleSheet("font-weight: bold; color: #FFA500;")
+        self.start_button.setEnabled(False)
+        self.stop_button.setEnabled(False)
+        
+        # Reload model after a short delay
+        QTimer.singleShot(500, self.load_model)
     
     def update_tokens_label(self):
         """Update tokens slider label"""
@@ -860,12 +1270,18 @@ class MainWindow(QMainWindow):
     
     def new_document(self):
         """Create a new document"""
+        if self.is_initializing:
+            return
+            
         self.prompt_input.clear()
         self.result_output.clear()
         self.tab_widget.setCurrentIndex(0)
     
     def open_document(self):
-        """Open a document"""
+        """Open a document with error handling"""
+        if self.is_initializing:
+            return
+            
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Open Document", "", "Text Files (*.txt);;All Files (*)"
         )
@@ -876,13 +1292,21 @@ class MainWindow(QMainWindow):
                 self.prompt_input.setPlainText(content)
                 self.tab_widget.setCurrentIndex(0)
                 self.status_bar.showMessage(f"Opened: {file_path}")
+                logger.info(f"Opened document: {file_path}")
             except Exception as e:
                 logger.error(f"Failed to open file: {str(e)}")
-                from PyQt5.QtWidgets import QMessageBox
-                QMessageBox.critical(self, "Open Error", f"Failed to open file: {str(e)}")
+                ErrorHandler.show_warning(
+                    self, 
+                    "Open Error", 
+                    f"Failed to open file: {str(e)}",
+                    "Check if the file exists and you have permission to read it."
+                )
     
     def save_document(self):
-        """Save the current document"""
+        """Save the current document with error handling"""
+        if self.is_initializing:
+            return
+            
         file_path = self.settings_manager.get("last_file_path", "")
         if not file_path:
             self.save_document_as()
@@ -895,11 +1319,18 @@ class MainWindow(QMainWindow):
             logger.info(f"Document saved to {file_path}")
         except Exception as e:
             logger.error(f"Failed to save file: {str(e)}")
-            from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.critical(self, "Save Error", f"Failed to save file: {str(e)}")
+            ErrorHandler.show_warning(
+                self, 
+                "Save Error", 
+                f"Failed to save file: {str(e)}",
+                "Check if you have write permission for this location."
+            )
     
     def save_document_as(self):
         """Save the current document with a new name"""
+        if self.is_initializing:
+            return
+            
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Save Document", "", "Text Files (*.txt);;All Files (*)"
         )
@@ -912,55 +1343,91 @@ class MainWindow(QMainWindow):
                 logger.info(f"Document saved to {file_path}")
             except Exception as e:
                 logger.error(f"Failed to save file: {str(e)}")
-                from PyQt5.QtWidgets import QMessageBox
-                QMessageBox.critical(self, "Save Error", f"Failed to save file: {str(e)}")
+                ErrorHandler.show_warning(
+                    self, 
+                    "Save Error", 
+                    f"Failed to save file: {str(e)}",
+                    "Check if you have write permission for this location."
+                )
     
     def print_document(self):
-        """Print the current document"""
+        """Print the current document with error handling"""
+        if self.is_initializing:
+            return
+            
         printer = QPrinter(QPrinter.HighResolution)
         print_dialog = QPrintDialog(printer, self)
         
         if print_dialog.exec_() == QPrintDialog.Accepted:
-            self.result_output.print_(printer)
+            try:
+                self.result_output.print_(printer)
+                self.status_bar.showMessage("Document printed successfully")
+                logger.info("Document printed")
+            except Exception as e:
+                logger.error(f"Print failed: {str(e)}")
+                ErrorHandler.show_warning(
+                    self, 
+                    "Print Error", 
+                    f"Failed to print: {str(e)}",
+                    "Check your printer connection and settings."
+                )
     
     def undo_text(self):
-        """Undo text changes"""
+        """Undo text changes with context awareness"""
+        if self.is_initializing:
+            return
+            
         if self.tab_widget.currentIndex() == 0:
             self.prompt_input.undo()
         else:
             self.result_output.undo()
     
     def redo_text(self):
-        """Redo text changes"""
+        """Redo text changes with context awareness"""
+        if self.is_initializing:
+            return
+            
         if self.tab_widget.currentIndex() == 0:
             self.prompt_input.redo()
         else:
             self.result_output.redo()
     
     def cut_text(self):
-        """Cut selected text"""
+        """Cut selected text with context awareness"""
+        if self.is_initializing:
+            return
+            
         if self.tab_widget.currentIndex() == 0:
             self.prompt_input.cut()
         else:
             self.result_output.cut()
     
     def copy_text(self):
-        """Copy selected text"""
+        """Copy selected text with context awareness"""
+        if self.is_initializing:
+            return
+            
         if self.tab_widget.currentIndex() == 0:
             self.prompt_input.copy()
         else:
             self.result_output.copy()
     
     def paste_text(self):
-        """Paste text"""
+        """Paste text with context awareness"""
+        if self.is_initializing:
+            return
+            
         if self.tab_widget.currentIndex() == 0:
             self.prompt_input.paste()
         else:
             self.result_output.paste()
     
     def show_model_settings(self):
-        """Show model settings dialog"""
-        from PyQt5.QtWidgets import QDialog, QFormLayout, QLineEdit, QDialogButtonBox
+        """Show model settings dialog with validation"""
+        if self.is_initializing:
+            return
+            
+        from PyQt5.QtWidgets import QDialog, QFormLayout, QLineEdit, QDialogButtonBox, QComboBox
         
         dialog = QDialog(self)
         dialog.setWindowTitle("Model Settings")
@@ -968,66 +1435,115 @@ class MainWindow(QMainWindow):
         
         layout = QFormLayout()
         
+        # Model name (fixed for this version)
         model_name = QLineEdit("aubmindlab/ara-gpt2-base")
         model_name.setReadOnly(True)
         layout.addRow("Model Name:", model_name)
         
+        # Cache directory
         cache_dir = QLineEdit(os.path.expanduser('~/.cache/ai_text_generator_pro/models'))
         cache_dir.setReadOnly(True)
         layout.addRow("Cache Directory:", cache_dir)
         
-        device = QLineEdit("Auto")
-        device.setReadOnly(True)
-        layout.addRow("Device:", device)
+        # Device selection
+        device_combo = QComboBox()
+        device_combo.addItems(["Auto", "CPU", "CUDA"])
+        current_device = self.settings_manager.get('model/device', 'auto').lower()
+        if current_device == 'cuda':
+            device_combo.setCurrentIndex(2)
+        elif current_device == 'cpu':
+            device_combo.setCurrentIndex(1)
+        else:
+            device_combo.setCurrentIndex(0)
+        layout.addRow("Device:", device_combo)
         
-        quantization = QLineEdit("Auto")
-        quantization.setReadOnly(True)
-        layout.addRow("Quantization:", quantization)
+        # Quantization selection
+        quant_combo = QComboBox()
+        quant_combo.addItems(["Auto", "None", "4-bit", "8-bit"])
+        current_quant = self.settings_manager.get('model/quantization', 'auto').lower()
+        if current_quant == '4-bit':
+            quant_combo.setCurrentIndex(2)
+        elif current_quant == '8-bit':
+            quant_combo.setCurrentIndex(3)
+        elif current_quant == 'none':
+            quant_combo.setCurrentIndex(1)
+        else:
+            quant_combo.setCurrentIndex(0)
+        layout.addRow("Quantization:", quant_combo)
         
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
         layout.addRow(buttons)
         
-        dialog.setLayout(layout)
-        dialog.exec_()
+        if dialog.exec_() == QDialog.Accepted:
+            # Save the selected settings
+            device_map = {0: 'auto', 1: 'cpu', 2: 'cuda'}
+            quant_map = {0: 'auto', 1: 'none', 2: '4-bit', 3: '8-bit'}
+            
+            new_settings = {
+                'model_name': "aubmindlab/ara-gpt2-base",
+                'cache_dir': os.path.expanduser('~/.cache/ai_text_generator_pro/models'),
+                'device': device_map[device_combo.currentIndex()],
+                'quantization': quant_map[quant_combo.currentIndex()]
+            }
+            
+            self.settings_manager.save_model_settings(new_settings)
+            self.reload_model()
     
     def show_about_dialog(self):
-        """Show about dialog"""
-        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton
+        """Show about dialog with system information"""
+        if self.is_initializing:
+            return
+            
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QScrollArea
         
         dialog = QDialog(self)
         dialog.setWindowTitle("About AI Text Generator Pro")
-        dialog.resize(500, 400)
+        dialog.resize(600, 500)
         
-        layout = QVBoxLayout()
+        main_layout = QVBoxLayout()
         
         # Logo and title
         title = QLabel(f"<h1>{APP_NAME}</h1>")
         title.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title)
+        main_layout.addWidget(title)
         
         version = QLabel(f"<h3>Version {APP_VERSION}</h3>")
         version.setAlignment(Qt.AlignCenter)
-        layout.addWidget(version)
+        main_layout.addWidget(version)
         
         description = QLabel(APP_DESCRIPTION)
         description.setWordWrap(True)
         description.setAlignment(Qt.AlignCenter)
-        layout.addWidget(description)
+        main_layout.addWidget(description)
+        
+        # System information
+        sys_info = QLabel(
+            f"<b>System Information:</b><br/>"
+            f"Python: {sys.version.split()[0]}<br/>"
+            f"PyQt5: {'.'.join(map(str, PyQt5.QtCore.QT_VERSION_STR.split('.')[:3]))}<br/>"
+            f"PyTorch: {DependencyChecker.check_torch() or 'Not available'}<br/>"
+            f"CUDA: {'Available' if DependencyChecker.check_cuda() else 'Not available'}<br/>"
+            f"Log file: {log_file}"
+        )
+        sys_info.setWordWrap(True)
+        main_layout.addWidget(sys_info)
         
         # Features list
         features = QLabel(
             "<b>Key Features:</b><br/>"
-            "- 999x performance improvement over standard tools<br/>"
-            "- Professional GUI interface with dark/light themes<br/>"
-            "- Advanced Arabic language support<br/>"
-            "- Real-time performance metrics<br/>"
-            "- Model quantization (4-bit & 8-bit)<br/>"
-            "- Context-aware text generation<br/>"
-            "- Export to multiple formats"
+            "- Comprehensive error handling and solutions<br/>"
+            "- Automatic system dependency checks<br/>"
+            "- Fallback mechanisms for model loading<br/>"
+            "- User-friendly error messages with solutions<br/>"
+            "- Detailed system information in About dialog<br/>"
+            "- Input validation and parameter constraints<br/>"
+            "- GPU/CPU auto-detection and optimization<br/>"
+            "- Complete English interface"
         )
         features.setWordWrap(True)
-        layout.addWidget(features)
+        main_layout.addWidget(features)
         
         # Copyright
         copyright = QLabel(
@@ -1037,33 +1553,64 @@ class MainWindow(QMainWindow):
         )
         copyright.setAlignment(Qt.AlignCenter)
         copyright.setOpenExternalLinks(True)
-        layout.addWidget(copyright)
+        main_layout.addWidget(copyright)
         
         # OK button
         ok_button = QPushButton("OK")
         ok_button.clicked.connect(dialog.accept)
         ok_button.setFixedSize(100, 30)
-        layout.addWidget(ok_button, 0, Qt.AlignCenter)
+        main_layout.addWidget(ok_button, 0, Qt.AlignCenter)
         
-        dialog.setLayout(layout)
+        dialog.setLayout(main_layout)
         dialog.exec_()
 
+    def closeEvent(self, event):
+        """Handle application close event with cleanup"""
+        # Stop any running threads
+        if self.model_loader and self.model_loader.isRunning():
+            self.model_loader.stop()
+            self.model_loader.wait()
+        
+        if self.text_generator and self.text_generator.isRunning():
+            self.text_generator.stop()
+            self.text_generator.wait()
+        
+        # Save settings
+        self.save_settings()
+        
+        logger.info("Application closed successfully")
+        event.accept()
+
 def main():
-    """Main application entry point"""
+    """Main application entry point with comprehensive error handling"""
+    # First, verify critical system dependencies
+    if not check_system_dependencies():
+        print("❌ Cannot proceed without required system libraries. Please install them and try again.")
+        sys.exit(1)
+    
     # Create application
-    app = QApplication(sys.argv)
-    
-    # Set application attributes
-    app.setApplicationName(APP_NAME)
-    app.setApplicationVersion(APP_VERSION)
-    app.setOrganizationName("AI Text Generator Pro")
-    app.setOrganizationDomain("aitextgenpro.example.com")
-    
-    # Create and show main window
-    window = MainWindow()
-    
-    # Start the application
-    sys.exit(app.exec_())
+    try:
+        app = QApplication(sys.argv)
+        
+        # Set application attributes
+        app.setApplicationName(APP_NAME)
+        app.setApplicationVersion(APP_VERSION)
+        app.setOrganizationName("AI Text Generator Pro")
+        app.setOrganizationDomain("aitextgenpro.example.com")
+        
+        # Create and show main window
+        window = MainWindow()
+        
+        # Start the application
+        sys.exit(app.exec_())
+        
+    except Exception as e:
+        # Critical error before UI can show
+        print(f"❌ Critical error: {str(e)}")
+        print("\nPlease check the log file for details:")
+        print(log_file)
+        logger.critical(f"Critical startup error: {str(e)}", exc_info=True)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
